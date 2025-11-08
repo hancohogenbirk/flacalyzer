@@ -11,7 +11,7 @@ zig-cache/
 *.exe
 
 # Analysis results (optional - uncomment if you don't want to commit these)
-# result.txt
+result.txt
 
 # IDE/Editor files
 .vscode/

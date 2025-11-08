@@ -2,6 +2,9 @@ const std = @import("std");
 const fs = std.fs;
 const mem = std.mem;
 const math = std.math;
+const Thread = std.Thread;
+const Mutex = std.Thread.Mutex;
+const Atomic = std.atomic.Value;
 
 // We'll use Zig's C interop to use libFLAC
 // Link with: -lFLAC -lm
@@ -794,6 +797,222 @@ const SuspiciousFile = struct {
     flatness_suspicious: bool,
 };
 
+// Thread-safe shared state for parallel processing
+const SharedAnalysisState = struct {
+    allocator: mem.Allocator,
+    mutex: Mutex,
+
+    // Counters (protected by mutex)
+    total_files: u32,
+    valid_lossless: u32,
+    definitely_transcoded: u32,
+    likely_transcoded: u32,
+    invalid_flac: u32,
+
+    // Results collection
+    suspicious_files: std.ArrayList(SuspiciousFile),
+    output_buffer: std.ArrayList(u8),
+
+    // Atomic progress counter (lock-free)
+    files_processed: Atomic(u32),
+    total_flac_count: u32,
+
+    fn init(allocator: mem.Allocator, total_count: u32) SharedAnalysisState {
+        return SharedAnalysisState{
+            .allocator = allocator,
+            .mutex = Mutex{},
+            .total_files = 0,
+            .valid_lossless = 0,
+            .definitely_transcoded = 0,
+            .likely_transcoded = 0,
+            .invalid_flac = 0,
+            .suspicious_files = .empty,
+            .output_buffer = .empty,
+            .files_processed = Atomic(u32).init(0),
+            .total_flac_count = total_count,
+        };
+    }
+
+    fn deinit(self: *SharedAnalysisState) void {
+        for (self.suspicious_files.items) |file| {
+            self.allocator.free(file.path);
+        }
+        self.suspicious_files.deinit(self.allocator);
+        self.output_buffer.deinit(self.allocator);
+    }
+};
+
+// Work queue for distributing files to threads
+const WorkQueue = struct {
+    allocator: mem.Allocator,
+    mutex: Mutex,
+    files: std.ArrayList([]const u8),
+    next_index: usize,
+
+    fn init(allocator: mem.Allocator) WorkQueue {
+        return WorkQueue{
+            .allocator = allocator,
+            .mutex = Mutex{},
+            .files = .empty,
+            .next_index = 0,
+        };
+    }
+
+    fn deinit(self: *WorkQueue) void {
+        for (self.files.items) |path| {
+            self.allocator.free(path);
+        }
+        self.files.deinit(self.allocator);
+    }
+
+    fn addFile(self: *WorkQueue, path: []const u8) !void {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+
+        const path_copy = try self.allocator.dupe(u8, path);
+        try self.files.append(self.allocator, path_copy);
+    }
+
+    fn getNextFile(self: *WorkQueue) ?[]const u8 {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+
+        if (self.next_index >= self.files.items.len) {
+            return null;
+        }
+
+        const file = self.files.items[self.next_index];
+        self.next_index += 1;
+        return file;
+    }
+
+    fn getTotalFiles(self: *WorkQueue) usize {
+        self.mutex.lock();
+        defer self.mutex.unlock();
+        return self.files.items.len;
+    }
+};
+
+// Worker thread context
+const WorkerContext = struct {
+    allocator: mem.Allocator,
+    queue: *WorkQueue,
+    state: *SharedAnalysisState,
+};
+
+// Worker thread function
+fn workerThread(ctx: WorkerContext) void {
+    while (ctx.queue.getNextFile()) |file_path| {
+        // Analyze the file
+        const analysis = analyzeFlac(ctx.allocator, file_path) catch |err| {
+            // Handle error
+            ctx.state.mutex.lock();
+            ctx.state.invalid_flac += 1;
+            ctx.state.mutex.unlock();
+
+            const writer = ctx.state.output_buffer.writer(ctx.allocator);
+            ctx.state.mutex.lock();
+            writer.print("✗ {s} - Error: {}\n", .{ file_path, err }) catch {};
+            ctx.state.mutex.unlock();
+
+            _ = ctx.state.files_processed.fetchAdd(1, .monotonic);
+            continue;
+        };
+
+        if (analysis.is_valid_flac) {
+            ctx.state.mutex.lock();
+            defer ctx.state.mutex.unlock();
+
+            const writer = ctx.state.output_buffer.writer(ctx.allocator);
+
+            switch (analysis.transcoding_confidence) {
+                .definitely_transcoded => {
+                    ctx.state.definitely_transcoded += 1;
+                    ctx.state.suspicious_files.append(ctx.allocator, SuspiciousFile{
+                        .path = ctx.allocator.dupe(u8, analysis.path) catch "",
+                        .sample_rate = analysis.sample_rate,
+                        .bits_per_sample = analysis.bits_per_sample,
+                        .channels = analysis.channels,
+                        .cutoff = analysis.frequency_cutoff,
+                        .confidence = analysis.confidence_value,
+                        .is_definitely = true,
+                        .bit_depth_valid = analysis.bit_depth_valid,
+                        .actual_bit_depth = analysis.actual_bit_depth,
+                        .histogram_suspicious = analysis.histogram_suspicious,
+                        .histogram_score = analysis.histogram_score,
+                        .bands_suspicious = analysis.bands_suspicious,
+                        .band_analysis = analysis.band_analysis,
+                        .spectral_flatness = analysis.spectral_flatness,
+                        .flatness_suspicious = analysis.flatness_suspicious,
+                    }) catch {};
+                },
+                .likely_transcoded => {
+                    ctx.state.likely_transcoded += 1;
+                    ctx.state.suspicious_files.append(ctx.allocator, SuspiciousFile{
+                        .path = ctx.allocator.dupe(u8, analysis.path) catch "",
+                        .sample_rate = analysis.sample_rate,
+                        .bits_per_sample = analysis.bits_per_sample,
+                        .channels = analysis.channels,
+                        .cutoff = analysis.frequency_cutoff,
+                        .confidence = analysis.confidence_value,
+                        .is_definitely = false,
+                        .bit_depth_valid = analysis.bit_depth_valid,
+                        .actual_bit_depth = analysis.actual_bit_depth,
+                        .histogram_suspicious = analysis.histogram_suspicious,
+                        .histogram_score = analysis.histogram_score,
+                        .bands_suspicious = analysis.bands_suspicious,
+                        .band_analysis = analysis.band_analysis,
+                        .spectral_flatness = analysis.spectral_flatness,
+                        .flatness_suspicious = analysis.flatness_suspicious,
+                    }) catch {};
+                },
+                .not_transcoded => {
+                    ctx.state.valid_lossless += 1;
+                },
+            }
+
+            const status = switch (analysis.transcoding_confidence) {
+                .definitely_transcoded => "❌ TRANSCODED",
+                .likely_transcoded => "⚠️  SUSPICIOUS",
+                .not_transcoded => "✓ LOSSLESS",
+            };
+
+            writer.print("{s} {s} [{}Hz, {}bit, {}ch, cutoff: {d:.1}kHz]", .{
+                status,
+                analysis.path,
+                analysis.sample_rate,
+                analysis.bits_per_sample,
+                analysis.channels,
+                analysis.frequency_cutoff / 1000.0,
+            }) catch {};
+
+            if (analysis.confidence_value > 0.0) {
+                writer.print(" (confidence: {d:.1}%)", .{analysis.confidence_value * 100.0}) catch {};
+            }
+
+            if (!analysis.bit_depth_valid) {
+                writer.print(" ⚠️ FAKE {d}-BIT (actually {d}-bit)", .{ analysis.bits_per_sample, analysis.actual_bit_depth }) catch {};
+            }
+
+            if (analysis.histogram_suspicious) {
+                writer.print(" ⚠️ QUANTIZED (histogram score: {d:.0}%)", .{analysis.histogram_score * 100.0}) catch {};
+            }
+
+            writer.print("\n", .{}) catch {};
+        } else {
+            ctx.state.mutex.lock();
+            defer ctx.state.mutex.unlock();
+
+            ctx.state.invalid_flac += 1;
+            const err_msg = analysis.error_msg orelse "Unknown error";
+            const writer = ctx.state.output_buffer.writer(ctx.allocator);
+            writer.print("✗ {s} - {s}\n", .{ analysis.path, err_msg }) catch {};
+        }
+
+        _ = ctx.state.files_processed.fetchAdd(1, .monotonic);
+    }
+}
+
 fn isFlacFile(path: []const u8) bool {
     if (path.len < 5) return false;
     const ext = path[path.len - 5 ..];
@@ -827,6 +1046,35 @@ fn countFlacFiles(allocator: mem.Allocator, path: []const u8) u32 {
     }
 
     return count;
+}
+
+// Collect FLAC file paths into work queue
+fn collectFlacFiles(allocator: mem.Allocator, path: []const u8, queue: *WorkQueue) !void {
+    var dir = fs.cwd().openDir(path, .{ .iterate = true }) catch |err| {
+        std.debug.print("Cannot open directory {s}: {}\n", .{ path, err });
+        return;
+    };
+    defer dir.close();
+
+    var iterator = dir.iterate();
+    while (try iterator.next()) |entry| {
+        const entry_path = try fs.path.join(allocator, &[_][]const u8{ path, entry.name });
+        defer allocator.free(entry_path);
+
+        switch (entry.kind) {
+            .file => {
+                if (isFlacFile(entry.name)) {
+                    try queue.addFile(entry_path);
+                }
+            },
+            .directory => {
+                if (!mem.eql(u8, entry.name, ".") and !mem.eql(u8, entry.name, "..")) {
+                    try collectFlacFiles(allocator, entry_path, queue);
+                }
+            },
+            else => {},
+        }
+    }
 }
 
 fn walkDirectory(
@@ -986,52 +1234,100 @@ pub fn main() !void {
     const args = try std.process.argsAlloc(allocator);
     defer std.process.argsFree(allocator, args);
 
-    const search_path = if (args.len > 1) args[1] else ".";
+    // Parse arguments: [path] [--threads N]
+    var search_path: []const u8 = ".";
+    var num_threads: u32 = 0; // 0 = auto-detect
 
-    // Collect output in a buffer for result.txt
-    var output_buffer: std.ArrayList(u8) = .empty;
-    defer output_buffer.deinit(allocator);
-    const output_writer = output_buffer.writer(allocator);
+    var i: usize = 1;
+    while (i < args.len) : (i += 1) {
+        if (mem.eql(u8, args[i], "--threads") or mem.eql(u8, args[i], "-j")) {
+            if (i + 1 < args.len) {
+                num_threads = std.fmt.parseInt(u32, args[i + 1], 10) catch {
+                    std.debug.print("Invalid thread count: {s}\n", .{args[i + 1]});
+                    return error.InvalidArgument;
+                };
+                i += 1;
+            }
+        } else if (!mem.startsWith(u8, args[i], "-")) {
+            search_path = args[i];
+        }
+    }
 
-    // Write header to file only
-    try output_writer.print("🎵 FLAC Lossless Analyzer with FFT Spectral Analysis (Zig Edition)\n", .{});
-    try output_writer.print("Scanning directory: {s}\n\n", .{search_path});
+    // Auto-detect CPU count if not specified
+    if (num_threads == 0) {
+        num_threads = @min(Thread.getCpuCount() catch 4, 16); // Cap at 16 threads
+    }
 
     // Print to console
-    std.debug.print("🎵 FLAC Lossless Analyzer with FFT Spectral Analysis (Zig Edition)\n", .{});
+    std.debug.print("🎵 FLAC Lossless Analyzer with FFT Spectral Analysis (Zig Edition - Parallel)\n", .{});
     std.debug.print("Scanning directory: {s}\n", .{search_path});
+    std.debug.print("Using {} worker threads\n", .{num_threads});
 
     // First, count total FLAC files
     std.debug.print("Counting FLAC files...\n", .{});
     const total_flac_count = countFlacFiles(allocator, search_path);
-    std.debug.print("Found {} FLAC files to analyze\n\n", .{total_flac_count});
+    std.debug.print("Found {} FLAC files to analyze\n", .{total_flac_count});
 
-    var total_files: u32 = 0;
-    var valid_lossless: u32 = 0;
-    var definitely_transcoded: u32 = 0;
-    var likely_transcoded: u32 = 0;
-    var invalid_flac: u32 = 0;
-
-    var suspicious_files: std.ArrayList(SuspiciousFile) = .empty;
-    defer {
-        for (suspicious_files.items) |file| {
-            allocator.free(file.path);
-        }
-        suspicious_files.deinit(allocator);
+    if (total_flac_count == 0) {
+        std.debug.print("No FLAC files found!\n", .{});
+        return;
     }
 
-    try walkDirectory(
-        allocator,
-        search_path,
-        &total_files,
-        &valid_lossless,
-        &definitely_transcoded,
-        &likely_transcoded,
-        &invalid_flac,
-        &suspicious_files,
-        output_writer,
-        total_flac_count,
-    );
+    // Collect all file paths
+    std.debug.print("Collecting file paths...\n", .{});
+    var queue = WorkQueue.init(allocator);
+    defer queue.deinit();
+
+    try collectFlacFiles(allocator, search_path, &queue);
+    std.debug.print("Collected {} files\n\n", .{queue.getTotalFiles()});
+
+    // Initialize shared state
+    var state = SharedAnalysisState.init(allocator, total_flac_count);
+    defer state.deinit();
+
+    // Write header to output buffer
+    const output_writer = state.output_buffer.writer(allocator);
+    try output_writer.print("🎵 FLAC Lossless Analyzer with FFT Spectral Analysis (Zig Edition - Parallel)\n", .{});
+    try output_writer.print("Scanning directory: {s}\n", .{search_path});
+    try output_writer.print("Using {} worker threads\n\n", .{num_threads});
+
+    // Spawn worker threads
+    const worker_ctx = WorkerContext{
+        .allocator = allocator,
+        .queue = &queue,
+        .state = &state,
+    };
+
+    const threads = try allocator.alloc(Thread, num_threads);
+    defer allocator.free(threads);
+
+    const start_time = std.time.milliTimestamp();
+
+    // Start workers
+    for (threads) |*thread| {
+        thread.* = try Thread.spawn(.{}, workerThread, .{worker_ctx});
+    }
+
+    // Progress reporter
+    while (state.files_processed.load(.monotonic) < total_flac_count) {
+        const processed = state.files_processed.load(.monotonic);
+        const percentage = if (total_flac_count > 0)
+            (@as(f64, @floatFromInt(processed)) / @as(f64, @floatFromInt(total_flac_count))) * 100.0
+        else
+            0.0;
+
+        std.debug.print("\r🔍 [{d}/{d}] {d:.1}% analyzing...", .{ processed, total_flac_count, percentage });
+        Thread.sleep(100 * std.time.ns_per_ms);
+    }
+
+    // Wait for all workers to finish
+    for (threads) |thread| {
+        thread.join();
+    }
+
+    const end_time = std.time.milliTimestamp();
+    const elapsed_ms = end_time - start_time;
+    const elapsed_s = @as(f64, @floatFromInt(elapsed_ms)) / 1000.0;
 
     // Clear the progress line
     std.debug.print("\r{s: <100}\r", .{""});
@@ -1044,19 +1340,24 @@ pub fn main() !void {
         }
     }.print;
 
+    state.mutex.lock();
+    state.total_files = state.valid_lossless + state.definitely_transcoded + state.likely_transcoded;
+    state.mutex.unlock();
+
     try printBoth(output_writer, "\n═══════════════════════════════════════\n", .{});
     try printBoth(output_writer, "📊 Summary:\n", .{});
-    try printBoth(output_writer, "   Total FLAC files found: {}\n", .{total_files});
-    try printBoth(output_writer, "   Valid lossless FLAC: {}\n", .{valid_lossless});
-    try printBoth(output_writer, "   Definitely transcoded: {}\n", .{definitely_transcoded});
-    try printBoth(output_writer, "   Likely transcoded: {}\n", .{likely_transcoded});
-    try printBoth(output_writer, "   Invalid/Corrupted: {}\n", .{invalid_flac});
+    try printBoth(output_writer, "   Total FLAC files found: {}\n", .{state.total_files});
+    try printBoth(output_writer, "   Valid lossless FLAC: {}\n", .{state.valid_lossless});
+    try printBoth(output_writer, "   Definitely transcoded: {}\n", .{state.definitely_transcoded});
+    try printBoth(output_writer, "   Likely transcoded: {}\n", .{state.likely_transcoded});
+    try printBoth(output_writer, "   Invalid/Corrupted: {}\n", .{state.invalid_flac});
+    try printBoth(output_writer, "   Analysis time: {d:.2}s ({d:.1} files/sec)\n", .{ elapsed_s, @as(f64, @floatFromInt(state.total_files)) / elapsed_s });
     try printBoth(output_writer, "═══════════════════════════════════════\n", .{});
 
     // Print suspicious files details
-    if (suspicious_files.items.len > 0) {
+    if (state.suspicious_files.items.len > 0) {
         try printBoth(output_writer, "\n⚠️  Suspicious/Transcoded Files:\n", .{});
-        for (suspicious_files.items) |file| {
+        for (state.suspicious_files.items) |file| {
             const type_str = if (file.is_definitely) "DEFINITELY TRANSCODED" else "LIKELY TRANSCODED";
             try printBoth(output_writer, "\n   [{s}] {s}\n", .{ type_str, file.path });
             try printBoth(output_writer, "      Sample rate: {}Hz, Bit depth: {}bit, Channels: {}\n", .{ file.sample_rate, file.bits_per_sample, file.channels });
@@ -1135,6 +1436,6 @@ pub fn main() !void {
     try printBoth(output_writer, "   5. Spectral Flatness - measures spectrum structure (noise-like vs tone-like)\n", .{});
 
     // Write to result.txt
-    try fs.cwd().writeFile(.{ .sub_path = "result.txt", .data = output_buffer.items });
+    try fs.cwd().writeFile(.{ .sub_path = "result.txt", .data = state.output_buffer.items });
     std.debug.print("\n✅ Results written to result.txt\n", .{});
 }
