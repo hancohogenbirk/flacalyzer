@@ -2,6 +2,36 @@
 
 All notable changes to the FLAC Analyzer project will be documented in this file.
 
+## [2.1.0] - 2025-11-08
+
+### Refactored - Modular Architecture 🏗️
+
+#### Code Organization
+- **Split monolithic 1,442-line file** into 6 focused modules
+- **Idiomatic Zig structure** following best practices
+- **Clear separation of concerns** for maintainability
+
+#### New Module Structure
+- `types.zig` (175 lines) - Shared data structures and C bindings
+- `analysis.zig` (436 lines) - FFT and spectral analysis algorithms
+- `flac_decoder.zig` (178 lines) - FLAC file decoding interface
+- `parallel.zig` (226 lines) - Thread pool and work queue
+- `output.zig` (140 lines) - Result formatting and display
+- `utils.zig` (73 lines) - File system utilities
+- `main.zig` (136 lines) - Minimal entry point and orchestration
+
+#### Benefits
+- **Easier to navigate** - Find specific functionality quickly
+- **Better maintainability** - Changes isolated to relevant modules
+- **Improved testability** - Test individual components
+- **Enhanced extensibility** - Simple to add new features
+- **Professional structure** - Industry-standard organization
+
+#### Documentation
+- Added `ARCHITECTURE.md` with detailed module descriptions
+- Dependency graph and data flow diagrams
+- Testing strategy and future extension guidelines
+
 ## [2.0.0] - 2025-11-08
 
 ### Added - Parallel Processing 🚀
