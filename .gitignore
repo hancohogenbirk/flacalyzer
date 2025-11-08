@@ -1,11 +1,19 @@
 # Zig build artifacts
-zig-cache/
 zig-out/
+zig-cache/
+.zig-cache/
 
-# Result files
-result.txt
+# Build outputs
+*.o
+*.so
+*.dylib
+*.dll
+*.exe
 
-# Editor files
+# Analysis results (optional - uncomment if you don't want to commit these)
+# result.txt
+
+# IDE/Editor files
 .vscode/
 .idea/
 *.swp
@@ -15,4 +23,3 @@ result.txt
 # OS files
 .DS_Store
 Thumbs.db
-

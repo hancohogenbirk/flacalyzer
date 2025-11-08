@@ -497,27 +497,27 @@ fn analyzeFrequencyBands(magnitude: []const f64, sample_rate: u32) BandAnalysisR
 // Low flatness (close to 0.0) = tone-like (structured, potentially lossy-coded)
 fn calculateSpectralFlatness(magnitude: []const f64) struct { f64, bool } {
     if (magnitude.len == 0) return .{ 0.0, false };
-    
+
     // Focus on meaningful frequencies (skip DC and very low bins)
     const start_bin: usize = 5;
     if (magnitude.len <= start_bin) return .{ 0.0, false };
-    
+
     const relevant_bins = magnitude[start_bin..];
-    
+
     // Calculate arithmetic mean
     var arithmetic_sum: f64 = 0.0;
     var count: u32 = 0;
-    
+
     for (relevant_bins) |mag| {
         if (mag > 0.0) {
             arithmetic_sum += mag;
             count += 1;
         }
     }
-    
+
     if (count == 0) return .{ 0.0, false };
     const arithmetic_mean = arithmetic_sum / @as(f64, @floatFromInt(count));
-    
+
     // Calculate geometric mean (using log-space to avoid underflow)
     var log_sum: f64 = 0.0;
     for (relevant_bins) |mag| {
@@ -527,15 +527,15 @@ fn calculateSpectralFlatness(magnitude: []const f64) struct { f64, bool } {
     }
     const log_mean = log_sum / @as(f64, @floatFromInt(count));
     const geometric_mean = @exp(log_mean);
-    
+
     // Spectral flatness = geometric_mean / arithmetic_mean
     const flatness = if (arithmetic_mean > 0.0) geometric_mean / arithmetic_mean else 0.0;
-    
+
     // Lossy codecs tend to have lower spectral flatness, especially in high frequencies
     // Typical lossless audio: flatness > 0.05 (varies by content)
     // Lossy transcoded: flatness < 0.03 (more structured/peaky spectrum)
     const is_suspicious = flatness < 0.03;
-    
+
     return .{ flatness, is_suspicious };
 }
 
@@ -642,11 +642,11 @@ fn analyzeSpectrum(allocator: mem.Allocator, samples: []const f64, sample_rate: 
 
     // Perform band analysis
     const band_result = analyzeFrequencyBands(avg_magnitude, sample_rate);
-    
+
     // Calculate spectral flatness
     const flatness_result = calculateSpectralFlatness(avg_magnitude);
     const spectral_flatness = flatness_result[0];
-    
+
     if (!found_cutoff or cutoff_frequency > nyquist * 0.95) {
         return .{ cutoff_frequency, .not_transcoded, 0.0, band_result, spectral_flatness };
     }
@@ -732,11 +732,11 @@ fn analyzeFlac(allocator: mem.Allocator, path: []const u8) !FlacAnalysis {
 
         // Check if band analysis is suspicious (use as supporting evidence)
         analysis.bands_suspicious = analysis.band_analysis.suspicious_score > 0.7;
-        
+
         // Check if spectral flatness is suspicious
         // Low flatness (<0.03) indicates highly structured spectrum typical of lossy codecs
         analysis.flatness_suspicious = analysis.spectral_flatness < 0.03 and analysis.spectral_flatness > 0.0;
-        
+
         // Only use histogram and band analysis as SUPPORTING evidence when spectral analysis is already suspicious
         // This prevents false positives from natural audio characteristics
         if (analysis.histogram_suspicious and analysis.transcoding_confidence != .not_transcoded) {
@@ -748,23 +748,23 @@ fn analyzeFlac(allocator: mem.Allocator, path: []const u8) !FlacAnalysis {
                 analysis.transcoding_confidence = .definitely_transcoded;
             }
         }
-        
+
         // Band analysis as supporting evidence - more aggressive than histogram
         if (analysis.bands_suspicious and analysis.transcoding_confidence != .not_transcoded) {
             analysis.confidence_value = @min(1.0, analysis.confidence_value + (analysis.band_analysis.suspicious_score * 0.4));
-            
+
             // Upgrade if band analysis strongly indicates transcoding
             if (analysis.transcoding_confidence == .likely_transcoded and analysis.band_analysis.suspicious_score > 0.8) {
                 analysis.transcoding_confidence = .definitely_transcoded;
             }
         }
-        
+
         // Spectral flatness as supporting evidence - strong indicator
         if (analysis.flatness_suspicious and analysis.transcoding_confidence != .not_transcoded) {
             // Very low flatness is a strong indicator of lossy codec artifacts
             const flatness_contribution = (0.03 - analysis.spectral_flatness) / 0.03; // 0.0 to 1.0
             analysis.confidence_value = @min(1.0, analysis.confidence_value + (flatness_contribution * 0.5));
-            
+
             // Upgrade if flatness is very low
             if (analysis.transcoding_confidence == .likely_transcoded and analysis.spectral_flatness < 0.015) {
                 analysis.transcoding_confidence = .definitely_transcoded;
@@ -1108,7 +1108,7 @@ pub fn main() !void {
                 try printBoth(output_writer, "           - Low band: {d:.4}, Mid band: {d:.4}, High band: {d:.4}\n", .{ file.band_analysis.low_band_energy, file.band_analysis.mid_band_energy, file.band_analysis.high_band_energy });
                 try printBoth(output_writer, "           - High band rolloff: {d:.1}% (normal range)\n", .{file.band_analysis.high_band_rolloff * 100.0});
             }
-            
+
             // Spectral Flatness Measurement
             const flatness_status = if (file.flatness_suspicious) "⚠️ SUSPICIOUS" else "✓ PASS";
             try printBoth(output_writer, "         • Spectral Flatness: {s}\n", .{flatness_status});

@@ -1,4 +1,4 @@
-# FLAC Analyzer (Zig Edition)
+# FLAC Analyzer
 
 A comprehensive FLAC audio file analyzer that detects transcoded (lossy-to-lossless) files using multiple advanced analysis techniques.
 
@@ -172,10 +172,12 @@ All advanced analysis methods (histogram, band analysis, spectral flatness) work
 
 ## License
 
-This project is open source. Feel free to use, modify, and distribute.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## Acknowledgments
 
-- Uses libFLAC for FLAC decoding
+- Uses [libFLAC](https://xiph.org/flac/) for FLAC decoding (BSD/Xiph.Org License)
+- Implements custom FFT (Cooley-Tukey algorithm) for spectral analysis
 - Inspired by various audio analysis tools and research on lossy codec characteristics
+- Developed with AI assistance (Claude/Cursor)
 
