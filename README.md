@@ -52,7 +52,7 @@ zig build
 ## Usage
 
 ```bash
-./zig-out/bin/flacalyser [path/to/flac/directory]
+./zig-out/bin/flacalyzer [path/to/flac/directory]
 ```
 
 If no path is provided, it analyzes the current directory.
@@ -60,7 +60,7 @@ If no path is provided, it analyzes the current directory.
 ### Example
 
 ```bash
-./zig-out/bin/flacalyser /path/to/music/collection
+./zig-out/bin/flacalyzer /path/to/music/collection
 ```
 
 ## Output
