@@ -134,3 +134,12 @@ pub fn main() !void {
     std.debug.print("\n✅ Results written to result.txt\n", .{});
 }
 
+// ============================================================================
+// Test Discovery
+// ============================================================================
+// This ensures all tests from imported modules are discovered and run
+
+test {
+    std.testing.refAllDeclsRecursive(@This());
+}
+

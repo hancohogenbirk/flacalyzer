@@ -372,6 +372,24 @@ Contributions are welcome! The modular structure makes it easy to:
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
+## Testing
+
+Run the comprehensive unit test suite:
+
+```bash
+zig build test
+```
+
+**Test Coverage:**
+- ✅ FFT correctness (DC signals, sine waves)
+- ✅ Histogram analysis (quantization detection)
+- ✅ Bit depth validation (upsampling detection)
+- ✅ Frequency band analysis (multi-sample-rate)
+- ✅ Spectral flatness (lossy artifact detection)
+- ✅ File utilities (extension validation)
+
+All tests use synthetic data generation for fast, deterministic validation without requiring real FLAC files.
+
 ## Acknowledgments
 
 - Uses [libFLAC](https://xiph.org/flac/) for FLAC decoding (BSD/Xiph.Org License)

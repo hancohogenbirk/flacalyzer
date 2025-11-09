@@ -71,3 +71,41 @@ pub fn collectFlacFiles(allocator: mem.Allocator, path: []const u8, queue: *Work
     }
 }
 
+// ============================================================================
+// Tests
+// ============================================================================
+
+const testing = std.testing;
+const expect = testing.expect;
+
+test "isFlacFile: recognizes lowercase .flac extension" {
+    try expect(isFlacFile("song.flac"));
+    try expect(isFlacFile("path/to/music.flac"));
+    try expect(isFlacFile("/absolute/path/audio.flac"));
+}
+
+test "isFlacFile: recognizes uppercase .FLAC extension" {
+    try expect(isFlacFile("SONG.FLAC"));
+    try expect(isFlacFile("path/to/MUSIC.FLAC"));
+}
+
+test "isFlacFile: rejects non-FLAC files" {
+    try expect(!isFlacFile("song.mp3"));
+    try expect(!isFlacFile("audio.wav"));
+    try expect(!isFlacFile("music.ogg"));
+    try expect(!isFlacFile("file.txt"));
+    try expect(!isFlacFile("noextension"));
+}
+
+test "isFlacFile: handles edge cases" {
+    try expect(!isFlacFile(""));
+    try expect(!isFlacFile("flac"));
+    try expect(!isFlacFile(".fla"));
+    try expect(!isFlacFile("test.flac.bak"));
+}
+
+test "isFlacFile: minimum length requirements" {
+    try expect(!isFlacFile("a.fl")); // Too short
+    try expect(isFlacFile("a.flac")); // Exactly minimum length
+}
+
