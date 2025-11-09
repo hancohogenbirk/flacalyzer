@@ -138,3 +138,51 @@ pub fn printMethodNotes(writer: anytype) !void {
     try printBoth(writer, "   5. Spectral Flatness - measures spectrum structure (noise-like vs tone-like)\n", .{});
 }
 
+/// Print quarantine operation summary
+pub fn printQuarantineSummary(
+    quarantine_result: anytype,
+    threshold_name: []const u8,
+    likely_remaining: u32,
+    writer: anytype,
+) !void {
+    try writer.print("\n🗂️  Quarantine Summary:\n", .{});
+    try writer.print("   ✅ Quarantined {} file{s}\n", .{
+        quarantine_result.moved_count,
+        if (quarantine_result.moved_count == 1) "" else "s",
+    });
+
+    if (quarantine_result.moved_count > 0 and quarantine_result.moved_files.items.len > 0) {
+        const max_display = 10;
+        const count = @min(quarantine_result.moved_files.items.len, max_display);
+
+        for (quarantine_result.moved_files.items[0..count]) |path| {
+            try writer.print("   ✓ {s}\n", .{path});
+        }
+
+        if (quarantine_result.moved_files.items.len > max_display) {
+            try writer.print("   ... and {} more\n", .{quarantine_result.moved_files.items.len - max_display});
+        }
+    }
+
+    if (quarantine_result.skipped_count > 0) {
+        try writer.print("   ⊘ Skipped {} file{s} (already in quarantine)\n", .{
+            quarantine_result.skipped_count,
+            if (quarantine_result.skipped_count == 1) "" else "s",
+        });
+    }
+
+    if (quarantine_result.failed_count > 0) {
+        try writer.print("   ✗ Failed to move {} file{s} (check permissions)\n", .{
+            quarantine_result.failed_count,
+            if (quarantine_result.failed_count == 1) "" else "s",
+        });
+    }
+
+    // Hint about threshold if using 'high' and there are likely transcoded files
+    if (std.mem.eql(u8, threshold_name, "high") and likely_remaining > 0) {
+        try writer.print("\n   💡 Use --threshold all to quarantine {} more \"LIKELY transcoded\" file{s}\n", .{
+            likely_remaining,
+            if (likely_remaining == 1) "" else "s",
+        });
+    }
+}

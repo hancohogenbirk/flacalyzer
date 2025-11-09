@@ -32,6 +32,14 @@ The analyzer uses **5 advanced techniques** to identify files that were transcod
 4. **Frequency Band Analysis** - Analyzes energy distribution across low/mid/high frequency bands
 5. **Spectral Flatness Measurement** - Measures spectrum structure (noise-like vs tone-like)
 
+### 🗂️ Quarantine Feature
+
+- **Automatically move suspicious files** to a separate folder for review
+- **Configurable threshold**: quarantine only "definitely transcoded" (high) or include "likely transcoded" (all)
+- **Preserve directory structure** in quarantine folder for easy organization
+- **Dry-run mode** to preview what would be quarantined without moving files
+- **Safe operation**: skips files if they already exist in quarantine, no overwrites
+
 ### Output Features
 
 - **Detailed diagnostics** for each suspicious file showing:
@@ -84,8 +92,17 @@ If no path is provided, it analyzes the current directory.
 
 ### Options
 
+**General:**
+- `--help` or `-h` - Display help message with all options and examples
+
+**Analysis:**
 - `--threads N` or `-j N` - Set number of worker threads (default: auto-detect CPU count)
 - Path argument - Directory to scan for FLAC files
+
+**Quarantine:**
+- `--quarantine <dir>` or `-q <dir>` - Move suspicious files to specified directory
+- `--threshold <level>` or `-t <level>` - Quarantine threshold: `high` (default, only definitely transcoded) or `all` (likely + definitely)
+- `--dry-run` - Show what would be quarantined without moving files
 
 ### Examples
 
@@ -102,6 +119,21 @@ If no path is provided, it analyzes the current directory.
 **Analyze current directory with 4 threads:**
 ```bash
 ./zig-out/bin/flacalyzer . -j 4
+```
+
+**Quarantine definitely transcoded files:**
+```bash
+./zig-out/bin/flacalyzer /path/to/music -q ./suspicious
+```
+
+**Quarantine all suspicious files (likely + definitely):**
+```bash
+./zig-out/bin/flacalyzer /path/to/music --quarantine ./suspicious --threshold all
+```
+
+**Dry-run (preview what would be quarantined):**
+```bash
+./zig-out/bin/flacalyzer /path/to/music -q ./suspicious --dry-run
 ```
 
 ## Output

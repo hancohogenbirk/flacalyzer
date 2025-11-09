@@ -214,7 +214,7 @@ pub fn analyzeFrequencyBands(magnitude: []const f64, sample_rate: u32) BandAnaly
     // Mid: ~11% - ~68% of Nyquist (midrange where lossy codecs typically cut)
     // High: ~68% - 100% of Nyquist (treble, most affected by lossy encoding)
     const low_cutoff = nyquist * 0.227; // ~11% of sample rate (5kHz @ 44.1kHz, 10.9kHz @ 96kHz)
-    const mid_cutoff = nyquist * 0.68;  // ~34% of sample rate (15kHz @ 44.1kHz, 32.6kHz @ 96kHz)
+    const mid_cutoff = nyquist * 0.68; // ~34% of sample rate (15kHz @ 44.1kHz, 32.6kHz @ 96kHz)
 
     var low_band_energy: f64 = 0.0;
     var mid_band_energy: f64 = 0.0;
@@ -451,12 +451,12 @@ const expectApproxEqAbs = testing.expectApproxEqAbs;
 fn generateSineWave(allocator: mem.Allocator, frequency: f64, sample_rate: u32, num_samples: usize) ![]f64 {
     const samples = try allocator.alloc(f64, num_samples);
     const angular_freq = 2.0 * math.pi * frequency;
-    
+
     for (samples, 0..) |*sample, i| {
         const t = @as(f64, @floatFromInt(i)) / @as(f64, @floatFromInt(sample_rate));
         sample.* = @sin(angular_freq * t) * 10000.0; // Amplitude of 10000
     }
-    
+
     return samples;
 }
 
@@ -465,32 +465,32 @@ fn generateWhiteNoise(allocator: mem.Allocator, num_samples: usize, seed: u64) !
     const samples = try allocator.alloc(f64, num_samples);
     var prng = std.Random.DefaultPrng.init(seed);
     const random = prng.random();
-    
+
     for (samples) |*sample| {
         sample.* = (random.float(f64) - 0.5) * 20000.0; // Range: -10000 to 10000
     }
-    
+
     return samples;
 }
 
 test "FFT: DC signal produces energy only at bin 0" {
     const allocator = testing.allocator;
     const fft_size = 1024;
-    
+
     // Generate DC signal (constant value)
     const samples = try allocator.alloc(f64, fft_size);
     defer allocator.free(samples);
     @memset(samples, 5000.0);
-    
+
     var fft_buffer = try allocator.alloc(Complex, fft_size);
     defer allocator.free(fft_buffer);
-    
+
     try fft(allocator, samples, fft_buffer);
-    
+
     // DC component should be in bin 0
     const dc_magnitude = fft_buffer[0].magnitude();
     try expect(dc_magnitude > 1000.0); // Should have significant energy
-    
+
     // DC should be the dominant frequency (larger than all other bins)
     for (fft_buffer[1..], 0..) |bin, i| {
         const mag = bin.magnitude();
@@ -504,47 +504,47 @@ test "FFT: pure sine wave produces peak at correct frequency" {
     const sample_rate: u32 = 44100;
     const test_frequency = 1000.0; // 1 kHz tone
     const fft_size = 8192;
-    
+
     // Generate 1 kHz sine wave
     const samples = try generateSineWave(allocator, test_frequency, sample_rate, fft_size);
     defer allocator.free(samples);
-    
+
     var fft_buffer = try allocator.alloc(Complex, fft_size);
     defer allocator.free(fft_buffer);
-    
+
     try fft(allocator, samples, fft_buffer);
-    
+
     // Find peak frequency
     var max_magnitude: f64 = 0.0;
     var max_bin: usize = 0;
-    
-    for (fft_buffer[0..fft_size/2], 0..) |bin, i| {
+
+    for (fft_buffer[0 .. fft_size / 2], 0..) |bin, i| {
         const mag = bin.magnitude();
         if (mag > max_magnitude) {
             max_magnitude = mag;
             max_bin = i;
         }
     }
-    
+
     // Calculate frequency of peak bin
     const freq_resolution = @as(f64, @floatFromInt(sample_rate)) / @as(f64, @floatFromInt(fft_size));
     const detected_freq = @as(f64, @floatFromInt(max_bin)) * freq_resolution;
-    
+
     // Should detect frequency within +/- 10 Hz
     try expectApproxEqAbs(test_frequency, detected_freq, 10.0);
 }
 
 test "histogram: uniform distribution has low gappiness" {
     const allocator = testing.allocator;
-    
+
     // Generate uniform distribution (white noise)
     const samples = try generateWhiteNoise(allocator, 50000, 12345);
     defer allocator.free(samples);
-    
+
     const result = analyzeHistogram(samples, 16);
     const is_suspicious = result[0];
     const suspicion_score = result[1];
-    
+
     // Uniform distribution should NOT be suspicious
     try expect(!is_suspicious);
     try expect(suspicion_score < 0.5);
@@ -552,24 +552,24 @@ test "histogram: uniform distribution has low gappiness" {
 
 test "histogram: quantized data is detected as suspicious" {
     const allocator = testing.allocator;
-    
+
     // Generate quantized data (simulating lossy compression)
     const samples = try allocator.alloc(f64, 50000);
     defer allocator.free(samples);
-    
+
     var prng = std.Random.DefaultPrng.init(54321);
     const random = prng.random();
-    
+
     // Quantize to only 32 distinct values (creating gaps)
     for (samples) |*sample| {
         const quantized = @floor(random.float(f64) * 32.0);
         sample.* = quantized * 625.0; // Spread out the values
     }
-    
+
     const result = analyzeHistogram(samples, 16);
     const is_suspicious = result[0];
     const suspicion_score = result[1];
-    
+
     // Quantized data should be flagged as suspicious
     try expect(is_suspicious);
     try expect(suspicion_score > 0.7);
@@ -577,69 +577,69 @@ test "histogram: quantized data is detected as suspicious" {
 
 test "bit depth: genuine 16-bit data validates correctly" {
     const allocator = testing.allocator;
-    
+
     // Generate data that uses full 16-bit range
     const samples = try allocator.alloc(f64, 50000);
     defer allocator.free(samples);
-    
+
     var prng = std.Random.DefaultPrng.init(11111);
     const random = prng.random();
-    
+
     for (samples) |*sample| {
         // Generate full 16-bit values (using all bits including LSBs)
         const val = random.intRangeAtMost(i16, -32768, 32767);
         sample.* = @as(f64, @floatFromInt(val));
     }
-    
+
     const result = analyzeBitDepth(samples, 16);
     const is_valid = result[0];
     const actual_depth = result[1];
-    
+
     try expect(is_valid);
     try expectEqual(@as(u32, 16), actual_depth);
 }
 
 test "bit depth: upsampled 16-bit in 24-bit is detected" {
     const allocator = testing.allocator;
-    
+
     // Generate 16-bit data padded to 24-bit (lower 8 bits are zeros)
     const samples = try allocator.alloc(f64, 50000);
     defer allocator.free(samples);
-    
+
     var prng = std.Random.DefaultPrng.init(22222);
     const random = prng.random();
-    
+
     for (samples) |*sample| {
         // Generate 16-bit value and shift left by 8 bits (zero out lower 8 bits)
         const val_16 = random.intRangeAtMost(i16, -32768, 32767);
         const val_24 = @as(i32, val_16) << 8; // Pad with zeros
         sample.* = @as(f64, @floatFromInt(val_24));
     }
-    
+
     const result = analyzeBitDepth(samples, 24);
     const is_valid = result[0];
     const actual_depth = result[1];
-    
+
     try expect(!is_valid); // Should detect as fake 24-bit
     try expectEqual(@as(u32, 16), actual_depth); // Should identify as 16-bit
 }
 
 test "frequency bands: scale correctly for 44.1kHz" {
     const sample_rate: u32 = 44100;
-    
+
     // Create test magnitude spectrum
     const allocator = testing.allocator;
     const magnitude = try allocator.alloc(f64, 4096);
     defer allocator.free(magnitude);
     @memset(magnitude, 100.0); // Uniform energy
-    
+
     const result = analyzeFrequencyBands(magnitude, sample_rate);
-    
+
     // All bands should have similar energy for uniform input
     try expect(result.low_band_energy > 50.0);
     try expect(result.mid_band_energy > 50.0);
     try expect(result.high_band_energy > 50.0);
-    
+
     // Rolloff should be low (< 50%) for uniform spectrum
     try expect(result.high_band_rolloff < 0.5);
     try expect(result.suspicious_score < 0.3);
@@ -647,14 +647,14 @@ test "frequency bands: scale correctly for 44.1kHz" {
 
 test "frequency bands: scale correctly for 96kHz" {
     const sample_rate: u32 = 96000;
-    
+
     const allocator = testing.allocator;
     const magnitude = try allocator.alloc(f64, 4096);
     defer allocator.free(magnitude);
     @memset(magnitude, 100.0);
-    
+
     const result = analyzeFrequencyBands(magnitude, sample_rate);
-    
+
     // Check that bands are calculated proportionally
     try expect(result.low_band_energy > 50.0);
     try expect(result.mid_band_energy > 50.0);
@@ -664,11 +664,11 @@ test "frequency bands: scale correctly for 96kHz" {
 test "frequency bands: detect high-frequency rolloff" {
     const sample_rate: u32 = 44100;
     const allocator = testing.allocator;
-    
+
     // Create spectrum with severe high-frequency rolloff
     const magnitude = try allocator.alloc(f64, 4096);
     defer allocator.free(magnitude);
-    
+
     // Strong energy in low/mid, weak in high
     for (magnitude, 0..) |*mag, i| {
         const freq_ratio = @as(f64, @floatFromInt(i)) / @as(f64, @floatFromInt(magnitude.len));
@@ -678,9 +678,9 @@ test "frequency bands: detect high-frequency rolloff" {
             mag.* = 10.0; // Weak high energy (90% rolloff)
         }
     }
-    
+
     const result = analyzeFrequencyBands(magnitude, sample_rate);
-    
+
     // Should detect severe rolloff
     try expect(result.high_band_rolloff > 0.8);
     try expect(result.suspicious_score > 0.4); // Should be flagged as suspicious
@@ -688,23 +688,23 @@ test "frequency bands: detect high-frequency rolloff" {
 
 test "spectral flatness: white noise has high flatness" {
     const allocator = testing.allocator;
-    
+
     // White noise should have flat spectrum (high flatness)
     const magnitude = try allocator.alloc(f64, 1024);
     defer allocator.free(magnitude);
-    
+
     // Simulate white noise spectrum (uniform energy)
     var prng = std.Random.DefaultPrng.init(99999);
     const random = prng.random();
-    
+
     for (magnitude) |*mag| {
         mag.* = 80.0 + random.float(f64) * 40.0; // 80-120 range (relatively flat)
     }
-    
+
     const result = calculateSpectralFlatness(magnitude);
     const flatness = result[0];
     const is_suspicious = result[1];
-    
+
     // White noise should have high flatness (> 0.05, not suspicious)
     try expect(flatness > 0.05);
     try expect(!is_suspicious);
@@ -712,20 +712,20 @@ test "spectral flatness: white noise has high flatness" {
 
 test "spectral flatness: pure tone has low flatness" {
     const allocator = testing.allocator;
-    
+
     // Pure tone should have very peaky spectrum (low flatness)
     const magnitude = try allocator.alloc(f64, 1024);
     defer allocator.free(magnitude);
-    
+
     // Most bins have very low energy, one bin has extremely high energy
     // This creates a very low flatness typical of lossy compression artifacts
     @memset(magnitude, 0.1);
     magnitude[100] = 100000.0; // Extremely strong peak
-    
+
     const result = calculateSpectralFlatness(magnitude);
     const flatness = result[0];
     const is_suspicious = result[1];
-    
+
     // Pure tone should have very low flatness (< 0.03, flagged as suspicious)
     try expect(flatness < 0.03);
     try expect(is_suspicious);
@@ -733,25 +733,24 @@ test "spectral flatness: pure tone has low flatness" {
 
 test "spectral flatness: natural music has moderate flatness" {
     const allocator = testing.allocator;
-    
+
     // Simulate natural music spectrum (some peaks, some valleys)
     const magnitude = try allocator.alloc(f64, 1024);
     defer allocator.free(magnitude);
-    
+
     var prng = std.Random.DefaultPrng.init(77777);
     const random = prng.random();
-    
+
     for (magnitude, 0..) |*mag, i| {
         // Decreasing energy with frequency (natural)
         const freq_factor = 1.0 - (@as(f64, @floatFromInt(i)) / @as(f64, @floatFromInt(magnitude.len)));
         mag.* = (50.0 + random.float(f64) * 100.0) * freq_factor;
     }
-    
+
     const result = calculateSpectralFlatness(magnitude);
     const flatness = result[0];
-    
+
     // Natural music should have moderate flatness (between pure tone and white noise)
     try expect(flatness > 0.03);
     try expect(flatness < 0.9); // Should be less flat than pure white noise
 }
-
