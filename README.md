@@ -168,13 +168,17 @@ Analyzes the distribution of sample values to detect quantization artifacts:
 
 ### Frequency Band Analysis
 
-Divides spectrum into three bands and measures energy distribution:
+Divides spectrum into three proportional bands that scale with sample rate:
 
-- **Low band** (0-5 kHz): Bass frequencies
-- **Mid band** (5-15 kHz): Midrange
-- **High band** (15 kHz-Nyquist): Treble
+- **Low band** (0-~11% of Nyquist): Bass frequencies
+  - 44.1kHz: 0-5kHz | 96kHz: 0-10.9kHz | 192kHz: 0-21.8kHz
+- **Mid band** (~11%-~68% of Nyquist): Midrange frequencies
+  - 44.1kHz: 5-15kHz | 96kHz: 10.9-32.6kHz | 192kHz: 21.8-65.3kHz
+- **High band** (~68%-100% of Nyquist): Treble frequencies
+  - 44.1kHz: 15-22.1kHz | 96kHz: 32.6-48kHz | 192kHz: 65.3-96kHz
 
 Calculates rolloff between bands to detect excessive high-frequency attenuation.
+*Note: Bands scale proportionally to ensure accurate detection across all sample rates.*
 
 ### Spectral Flatness
 

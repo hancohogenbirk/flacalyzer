@@ -2,6 +2,30 @@
 
 All notable changes to the FLAC Analyzer project will be documented in this file.
 
+## [2.1.1] - 2025-11-08
+
+### Fixed - Nyquist Frequency Handling 🐛
+
+#### Issue
+- **Frequency band analysis used hardcoded boundaries** (5kHz, 15kHz)
+- Only worked correctly for 44.1/48kHz sample rates
+- Failed to scale properly for high sample rates (96kHz, 192kHz)
+- Identified by Claude AI code review
+
+#### Solution
+- **Implemented proportional band boundaries** based on Nyquist frequency
+- Low band: 0-11% of Nyquist (5kHz @ 44.1kHz, 10.9kHz @ 96kHz)
+- Mid band: 11%-68% of Nyquist (5-15kHz @ 44.1kHz, 10.9-32.6kHz @ 96kHz)
+- High band: 68%-100% of Nyquist (15-22.1kHz @ 44.1kHz, 32.6-48kHz @ 96kHz)
+
+#### Impact
+- **Correct analysis for all sample rates** (44.1, 48, 96, 192 kHz and beyond)
+- More accurate transcoding detection for high-res audio
+- Bands scale intelligently based on actual Nyquist frequency
+
+#### Credits
+- Thanks to Claude AI for identifying this issue during code review
+
 ## [2.1.0] - 2025-11-08
 
 ### Refactored - Modular Architecture 🏗️

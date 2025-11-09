@@ -208,9 +208,13 @@ pub fn analyzeFrequencyBands(magnitude: []const f64, sample_rate: u32) BandAnaly
     const num_bins = magnitude.len;
     const hz_per_bin = nyquist / @as(f64, @floatFromInt(num_bins));
 
-    // Define band boundaries
-    const low_cutoff = 5000.0; // 0-5 kHz (bass)
-    const mid_cutoff = 15000.0; // 5-15 kHz (mids)
+    // Define band boundaries proportionally to sample rate for proper scaling
+    // This ensures the bands scale correctly for all sample rates (44.1, 48, 96, 192 kHz)
+    // Low: 0 - ~11% of Nyquist (bass frequencies)
+    // Mid: ~11% - ~68% of Nyquist (midrange where lossy codecs typically cut)
+    // High: ~68% - 100% of Nyquist (treble, most affected by lossy encoding)
+    const low_cutoff = nyquist * 0.227; // ~11% of sample rate (5kHz @ 44.1kHz, 10.9kHz @ 96kHz)
+    const mid_cutoff = nyquist * 0.68;  // ~34% of sample rate (15kHz @ 44.1kHz, 32.6kHz @ 96kHz)
 
     var low_band_energy: f64 = 0.0;
     var mid_band_energy: f64 = 0.0;
