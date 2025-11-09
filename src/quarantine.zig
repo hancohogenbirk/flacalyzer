@@ -110,6 +110,7 @@ fn moveFileToQuarantine(
 
     // Build full quarantine path
     const quarantine_path = try fs.path.join(allocator, &[_][]const u8{ quarantine_dir, filename });
+    errdefer allocator.free(quarantine_path); // Free on error
 
     // Create directory structure (recursive)
     fs.cwd().makePath(quarantine_dir) catch |err| {
