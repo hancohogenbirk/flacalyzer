@@ -62,9 +62,49 @@ This document tracks potential features, improvements, and ideas for the FLAC An
 
 ---
 
+## 🔧 Code Quality & Quick Wins
+
+These are smaller improvements that can be done quickly to polish the existing codebase.
+
+### 3. Code Quality Improvements
+
+**Code Readability:**
+- [ ] Create `SpectrumResult` struct - Replace 5-tuple return from `analyzeSpectrum()` with named struct for better readability
+- [ ] Simplify FFT bit-reversal - Current implementation works but could use more standard approach
+
+**Estimated Effort:** Low (1 day)
+
+---
+
+### 4. Audio Processing Enhancements
+
+**Features:**
+- [ ] Average L+R channels - Currently only analyzes left channel; averaging both channels would be more accurate for mid-side stereo recordings
+- [ ] Add DC removal filter - Apply high-pass filter before FFT to remove DC offset (Hann window currently mitigates this)
+- [ ] Make analysis duration configurable - Expose `samples_to_collect` as CLI option instead of hardcoding
+- [ ] Add 32-bit bit depth detection - Support for 32-bit integer FLAC files (rare but complete)
+
+**Estimated Effort:** Low-Medium (2-3 days)
+
+---
+
+### 5. CLI & UX Polish
+
+**Features:**
+- [ ] Input validation for CLI arguments:
+  - Threshold values in valid range (0.0-1.0)
+  - Thread count > 0 and ≤ CPU count
+  - Path existence before processing
+- [ ] Better error messages - Ensure unknown flags trigger clear errors
+- [ ] Configurable detection thresholds - Allow users to tune sensitivity via CLI
+
+**Estimated Effort:** Low (1-2 days)
+
+---
+
 ## 🎯 Medium Priority Features
 
-### 3. Source Format Detection 🔍
+### 6. Source Format Detection 🔍
 
 **Description:** Try to identify the original lossy format based on frequency fingerprints
 
@@ -85,7 +125,7 @@ This document tracks potential features, improvements, and ideas for the FLAC An
 
 ---
 
-### 4. Auto-Organize Mode 📂
+### 7. Auto-Organize Mode 📂
 
 **Description:** Automatically move/sort files into good/suspicious/bad directories
 
@@ -116,7 +156,7 @@ output/
 
 ---
 
-### 5. Watch Mode 👀
+### 8. Watch Mode 👀
 
 **Description:** Monitor a directory and analyze new files as they appear
 
@@ -141,7 +181,7 @@ output/
 
 ---
 
-### 6. Batch Report Generation 📄
+### 9. Batch Report Generation 📄
 
 **Description:** Generate comprehensive reports for entire music collections
 
@@ -158,7 +198,7 @@ output/
 
 ## 🚀 Performance Optimizations
 
-### 7. Dynamic Work Splitting
+### 10. Dynamic Work Splitting
 
 **Description:** Split large files across multiple threads for better load balancing
 
@@ -175,7 +215,7 @@ output/
 
 ---
 
-### 8. I/O Optimization
+### 11. I/O Optimization
 
 **Features:**
 - [ ] Prefetch files while analyzing (async I/O)
@@ -188,7 +228,7 @@ output/
 
 ---
 
-### 9. Memory Pooling
+### 12. Memory Pooling
 
 **Features:**
 - [ ] Reuse FFT buffers across analyses
@@ -201,7 +241,7 @@ output/
 
 ---
 
-### 10. NUMA Awareness
+### 13. NUMA Awareness
 
 **Features:**
 - [ ] Pin threads to NUMA nodes
@@ -216,7 +256,7 @@ output/
 
 ## 🧪 Quality & Testing
 
-### 11. Comprehensive Test Suite
+### 14. Comprehensive Test Suite
 
 **Features:**
 - [ ] Unit tests for each module
@@ -236,7 +276,7 @@ output/
 
 ---
 
-### 12. Fuzzing
+### 15. Fuzzing
 
 **Features:**
 - [ ] Fuzz testing for FLAC decoder
@@ -249,7 +289,7 @@ output/
 
 ## 📚 Documentation & Usability
 
-### 13. Interactive Mode
+### 16. Interactive Mode
 
 **Features:**
 - [ ] TUI (Text User Interface) with real-time updates
@@ -263,7 +303,7 @@ output/
 
 ---
 
-### 14. Configuration File
+### 17. Configuration File
 
 **Features:**
 - [ ] Support for `.flacalyzerrc` configuration file
@@ -275,7 +315,7 @@ output/
 
 ---
 
-### 15. Man Page / Documentation
+### 18. Man Page / Documentation
 
 **Features:**
 - [ ] Complete man page
@@ -289,7 +329,7 @@ output/
 
 ## 🔧 Additional Features
 
-### 16. Multi-Format Support
+### 19. Multi-Format Support
 
 **Description:** Extend analysis to other lossless formats
 
@@ -303,7 +343,7 @@ output/
 
 ---
 
-### 17. Plugin System
+### 20. Plugin System
 
 **Features:**
 - [ ] Allow custom analysis plugins
@@ -315,7 +355,7 @@ output/
 
 ---
 
-### 18. Network/Remote Analysis
+### 21. Network/Remote Analysis
 
 **Features:**
 - [ ] Client-server architecture
@@ -327,7 +367,7 @@ output/
 
 ---
 
-### 19. Machine Learning Enhancement
+### 22. Machine Learning Enhancement
 
 **Features:**
 - [ ] Train ML model on known good/bad files
@@ -345,7 +385,7 @@ output/
 
 ---
 
-### 20. Metadata Analysis
+### 23. Metadata Analysis
 
 **Features:**
 - [ ] Check for suspicious metadata patterns
@@ -359,7 +399,7 @@ output/
 
 ## 🎨 UI/UX Improvements
 
-### 21. Progress Bar Enhancements
+### 24. Progress Bar Enhancements
 
 **Features:**
 - [ ] Show current file being analyzed
@@ -371,7 +411,7 @@ output/
 
 ---
 
-### 22. Color Themes
+### 25. Color Themes
 
 **Features:**
 - [ ] Support for different terminal color schemes
@@ -383,7 +423,7 @@ output/
 
 ---
 
-### 23. Verbose/Debug Modes
+### 26. Verbose/Debug Modes
 
 **Features:**
 - [ ] `-v/--verbose` for detailed output
@@ -397,7 +437,7 @@ output/
 
 ## 📦 Distribution
 
-### 24. Package Manager Distribution
+### 27. Package Manager Distribution
 
 **Platforms:**
 - [ ] Arch Linux AUR package
@@ -412,7 +452,7 @@ output/
 
 ---
 
-### 25. Binary Releases
+### 28. Binary Releases
 
 **Features:**
 - [ ] Automated GitHub releases
@@ -426,7 +466,7 @@ output/
 
 ## 🤝 Community
 
-### 26. Contributing Guidelines
+### 29. Contributing Guidelines
 
 **Features:**
 - [ ] CONTRIBUTING.md
@@ -439,7 +479,7 @@ output/
 
 ---
 
-### 27. Benchmark Database
+### 30. Benchmark Database
 
 **Features:**
 - [ ] Public database of analysis results
@@ -506,6 +546,8 @@ Feel free to pick any item from this list and implement it! See `CONTRIBUTING.md
 
 ---
 
-**Last Updated:** 2025-11-08  
+**Last Updated:** 2025-11-10  
 **Maintainers:** Add your ideas and update priorities as needed!
+
+**Note:** Code quality items (#3-5) are based on reviews by ChatGPT and Grok (November 2024). Current code is production-quality - these are optional enhancements only.
 
